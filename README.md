@@ -50,44 +50,27 @@ The `dataSources` field in every response includes `"Gemini Agent · ADK functio
 ## Architecture
 
 ```mermaid
-flowchart LR
-  subgraph Multimodal Input
-    MIC[Voice Input\nWeb Speech API]
-    TEXT[Text Input\nGoogle Places]
-  end
+flowchart TD
+    MIC["🎤 Voice Input (Web Speech API)"] --> VP["Gemini NLP /api/voice-parse"]
+    TEXT["⌨️ Text Input (Google Places)"] --> RA
 
-  subgraph ADK Agent
-    VP[/api/voice-parse\nGemini NLP]
-    RA[/api/route-analysis\nrunRouteAgent]
-    TOOLS[Tool Declarations\nfetch_walking_routes\nfetch_pollen_data\nfetch_weather_data\nscore_route_exposure]
-  end
+    VP --> RA["ADK Agent /api/route-analysis"]
 
-  subgraph Google APIs
-    ROUTES[Google Routes API]
-    POLLEN[Google Pollen API]
-    WEATHER[Google Weather API]
-    GEMINI[Gemini 2.5 Flash]
-  end
+    RA --> ROUTES["Google Routes API"]
+    RA --> POLLEN["Google Pollen API"]
+    RA --> WEATHER["Google Weather API"]
+    RA --> TREE["NYC Street Tree Census"]
 
-  subgraph Data
-    TREE[NYC Tree Census\n700k+ trees]
-    SCORE[Exposure Scoring\nspecies × density × weather]
-  end
+    ROUTES --> SCORE["Exposure Scoring Engine"]
+    POLLEN --> SCORE
+    WEATHER --> SCORE
+    TREE --> SCORE
 
-  subgraph Multimodal Output
-    MAP[Google Maps\nRoute Overlay]
-    CARDS[Route Cards\nExposure Scores]
-    TTS[Voice Output\nspeechSynthesis]
-  end
+    SCORE --> GEMINI["Gemini 2.5 Flash"]
 
-  MIC --> VP --> RA
-  TEXT --> RA
-  RA --> TOOLS
-  TOOLS --> ROUTES & POLLEN & WEATHER
-  ROUTES & POLLEN & WEATHER --> SCORE
-  TREE --> SCORE
-  SCORE --> GEMINI
-  GEMINI --> MAP & CARDS & TTS
+    GEMINI --> MAP["🗺️ Google Maps Route Overlay"]
+    GEMINI --> CARDS["📊 Route Cards with Scores"]
+    GEMINI --> TTS["🔊 Voice Output (speechSynthesis)"]
 ```
 
 ---
