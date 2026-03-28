@@ -89,28 +89,41 @@ export function VoiceButton({ onResult, disabled }: VoiceButtonProps) {
 
       setState("processing");
 
+      let origin = "";
+      let destination = "";
+
+      // Try Gemini API first
       try {
         const res = await fetch("/api/voice-parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ transcript: text }),
         });
-
         const data = (await res.json()) as { origin?: string; destination?: string; error?: string };
-
-        if (!data.error && (data.origin || data.destination)) {
-          onResultRef.current(data.origin ?? "", data.destination ?? "");
-          setState("idle");
-        } else {
-          setState("error");
-          setTimeout(() => setState("idle"), 2500);
+        if (!data.error) {
+          origin = data.origin ?? "";
+          destination = data.destination ?? "";
         }
       } catch {
+        // fall through to local parser
+      }
+
+      // Local regex fallback — always works for "from X to Y" / "X to Y"
+      if (!origin && !destination) {
+        const local = parseTranscript(text);
+        origin = local.origin;
+        destination = local.destination;
+      }
+
+      setTranscript("");
+      transcriptRef.current = "";
+
+      if (origin || destination) {
+        onResultRef.current(origin, destination);
+        setState("idle");
+      } else {
         setState("error");
         setTimeout(() => setState("idle"), 2500);
-      } finally {
-        setTranscript("");
-        transcriptRef.current = "";
       }
     };
 
@@ -152,6 +165,20 @@ export function VoiceButton({ onResult, disabled }: VoiceButtonProps) {
       )}
     </div>
   );
+}
+
+// Local transcript parser — handles "from X to Y" and "X to Y" without API
+function parseTranscript(text: string): { origin: string; destination: string } {
+  // "from [origin] to [destination]"
+  const fromTo = text.match(/\bfrom\s+(.+?)\s+to\s+(.+)/i);
+  if (fromTo) return { origin: fromTo[1].trim(), destination: fromTo[2].trim() };
+
+  // "[origin] to [destination]"
+  const xToY = text.match(/^(.+?)\s+to\s+(.+)$/i);
+  if (xToY) return { origin: xToY[1].trim(), destination: xToY[2].trim() };
+
+  // Single location — treat as destination
+  return { origin: "", destination: text.trim() };
 }
 
 function MicIcon({ state }: { state: VoiceState }) {
