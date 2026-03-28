@@ -50,27 +50,26 @@ The `dataSources` field in every response includes `"Gemini Agent · ADK functio
 ## Architecture
 
 ```mermaid
-flowchart TD
-    MIC["🎤 Voice Input (Web Speech API)"] --> VP["Gemini NLP /api/voice-parse"]
-    TEXT["⌨️ Text Input (Google Places)"] --> RA
+flowchart LR
+    A[Voice Input] --> B[voice-parse API]
+    C[Text Input] --> D[route-analysis API]
+    B --> D
 
-    VP --> RA["ADK Agent /api/route-analysis"]
+    D --> E[Google Routes API]
+    D --> F[Google Pollen API]
+    D --> G[Google Weather API]
+    D --> H[NYC Tree Census]
 
-    RA --> ROUTES["Google Routes API"]
-    RA --> POLLEN["Google Pollen API"]
-    RA --> WEATHER["Google Weather API"]
-    RA --> TREE["NYC Street Tree Census"]
+    E --> I[Exposure Scoring]
+    F --> I
+    G --> I
+    H --> I
 
-    ROUTES --> SCORE["Exposure Scoring Engine"]
-    POLLEN --> SCORE
-    WEATHER --> SCORE
-    TREE --> SCORE
+    I --> J[Gemini 2.5 Flash]
 
-    SCORE --> GEMINI["Gemini 2.5 Flash"]
-
-    GEMINI --> MAP["🗺️ Google Maps Route Overlay"]
-    GEMINI --> CARDS["📊 Route Cards with Scores"]
-    GEMINI --> TTS["🔊 Voice Output (speechSynthesis)"]
+    J --> K[Map View]
+    J --> L[Route Cards]
+    J --> M[Voice Output]
 ```
 
 ---
