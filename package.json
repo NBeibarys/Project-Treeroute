@@ -9,7 +9,9 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build-tree-grid": "tsx scripts/build-tree-grid.ts"
+    "build-tree-grid": "tsx scripts/build-tree-grid.ts",
+    "capture:readme-demo": "node scripts/capture-readme-demo.mjs",
+    "build:readme-demo-gif": "powershell -ExecutionPolicy Bypass -File scripts/build-readme-demo-gif.ps1"
   },
   "dependencies": {
     "@google/genai": "latest",

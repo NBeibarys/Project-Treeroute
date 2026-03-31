@@ -6,3 +6,6 @@ node_modules
 dist
 coverage
 *.log
+.chrome-readme-demo
+.chrome-tmp
+docs/media/frames

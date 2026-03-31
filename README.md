@@ -1,171 +1,215 @@
 # treeroute
 
-**treeroute** is a multimodal, AI-powered walking route planner for allergy-sensitive New Yorkers. It maps 700,000+ NYC street trees to your allergy profile, layers live pollen pressure, wind, and humidity, and ranks walking routes by expected pollen exposure — so you walk safer, not just faster.
+treeroute is a hackathon-winning multimodal walking route planner for allergy-sensitive New Yorkers.
 
-Built for the NYC Build With AI Hackathon using Google GenAI SDK, Gemini 2.5 Flash, ADK agent architecture, and the NYC 2015 Street Tree Census.
+It helps people choose safer walking routes by combining:
 
+- NYC street tree census data
+- live pollen conditions
+- live weather and wind
+- Google Maps routing
+- Gemini-generated grounded explanations
+
+Instead of showing only the fastest path, treeroute ranks 2-3 walking routes by likely pollen exposure so users can walk safer, not just faster.
+
+Built for the NYC Build With AI Hackathon.
+
+Live demo:
+https://treeroute-501252220143.us-central1.run.app/
+
+Presentation deck:
 https://docs.google.com/presentation/d/1Kf7AQ54lSMRo7GjB3PVdwe48MnMswPF4Mdgl18ub_s0/edit?usp=sharing
----
 
-## Multimodal experience
+![treeroute demo](./docs/media/treeroute-demo.gif)
 
-treeroute covers all three modalities:
+## Why It Stands Out
+
+- Real public-interest use case: safer outdoor navigation for allergy-sensitive residents.
+- Multimodal experience: voice in, visual map output, voice summary out.
+- Strong AI usage: Gemini is used for voice parsing and grounded route explanation synthesis.
+- Civic + live data blend: NYC Tree Census plus Google Routes, Pollen, and Weather APIs.
+- End-to-end demo flow: landing page, registration, route planner, map, scoring, and explanation output.
+
+## Core Experience
+
+The product flow is:
+
+`/ -> /register -> /planner`
+
+1. A user enters a starting point and destination by typing or voice.
+2. The route draft is saved locally.
+3. The user registers once with allergy sensitivity and tree-trigger preferences.
+4. The planner loads the saved route and analyzes alternative walking paths.
+5. treeroute ranks the routes by expected pollen exposure and explains the recommendation.
+
+## Multimodal UX
 
 | Modality | Implementation |
 |---|---|
-| **Speak** | Web Speech API mic button — say "from Washington Square to Lincoln Center" |
-| **Hear** | `speechSynthesis` reads the recommended route aloud after analysis |
-| **See** | Google Maps route overlay with polylines, origin/destination markers, and hotspot circles |
+| Speak | Web Speech API mic button for route input |
+| Hear | `speechSynthesis` reads the best route recommendation aloud |
+| See | Google Maps route overlay, markers, and hotspot visualization |
 
-Voice input is parsed by Gemini via `/api/voice-parse` to extract origin and destination from natural speech. The voice button is available on both the landing page and the planner.
+Voice input is parsed through `/api/voice-parse`, which uses Gemini with a local parser fallback.
 
----
+## What The App Does
 
-## Agent architecture (ADK pattern)
+- Collects route intent on a branded landing page
+- Requires a lightweight allergy profile before route analysis
+- Supports specific tree-trigger selection or general tree avoidance
+- Generates 2-3 walking route alternatives
+- Scores routes using tree density, species overlap, pollen, wind, humidity, and sensitivity
+- Displays route cards, exposure scores, and map hotspots
+- Produces grounded natural-language explanations for why one route is safer
 
-The route analysis API uses an ADK-style single-turn orchestration agent in [`lib/server/agent.ts`](lib/server/agent.ts):
+## Tech Stack
 
-1. **Tool declarations** — 4 `FunctionDeclaration` objects registered with Gemini: `fetch_walking_routes`, `fetch_pollen_data`, `fetch_weather_data`, `score_route_exposure`
-2. **Parallel tool execution** — all three Google APIs (Routes, Pollen, Weather) are called concurrently via `Promise.all`
-3. **Scoring** — routes are scored against the NYC Street Tree Census grid (species match, canopy density, weather boost)
-4. **Gemini synthesis** — a single Gemini call receives all tool results as grounded context and returns JSON with `summary`, `civicSummary`, and `routeExplanations`
-5. **`FunctionCallingConfigMode.NONE`** — prevents Gemini from re-invoking tools; ensures grounded single-turn response
-
-The `dataSources` field in every response includes `"Gemini Agent · ADK function calling"`.
-
----
-
-## Product flow
-
-```
-/ (landing)  →  /register  →  /planner
-```
-
-1. User enters start and end on the landing page (typed or by voice)
-2. Route draft is saved to `localStorage`
-3. User registers once with name, email, sensitivity, and tree-species triggers
-4. Planner opens with the saved route prefilled — analysis runs immediately
-
----
+- Next.js 16 App Router
+- React + TypeScript
+- Google Maps JavaScript API
+- Google Routes API
+- Google Pollen API
+- Google Weather API
+- Google GenAI SDK with Gemini 2.5 Flash
+- NYC 2015 Street Tree Census
+- Vitest
+- Docker + Cloud Run deployment path
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[Voice Input] --> B[voice-parse API]
-    C[Text Input] --> D[route-analysis API]
+    A[Voice Input] --> B[/api/voice-parse]
+    C[Typed Input] --> D[/api/route-analysis]
     B --> D
 
     D --> E[Google Routes API]
     D --> F[Google Pollen API]
     D --> G[Google Weather API]
-    D --> H[NYC Tree Census]
+    D --> H[NYC Tree Grid]
 
     E --> I[Exposure Scoring]
     F --> I
     G --> I
     H --> I
 
-    I --> J[Gemini 2.5 Flash]
+    I --> J[Gemini Grounded Explanations]
 
     J --> K[Map View]
     J --> L[Route Cards]
-    J --> M[Voice Output]
+    J --> M[Voice Summary]
 ```
 
----
+The route analysis backend supports two execution paths:
 
-## Why this fits the hackathon
+- A direct analysis pipeline in `lib/server/route-analysis.ts`
+- An ADK-style single-turn orchestration agent in `lib/server/agent.ts`
 
-| Criteria | Implementation |
-|---|---|
-| **Multimodal UX (40%)** | Voice in → Gemini NLP → voice out + map — all in one flow |
-| **Agent Architecture (30%)** | ADK FunctionDeclaration pattern, parallel tool execution, grounded Gemini synthesis |
-| **Google APIs** | Routes, Pollen, Weather, Geocoding, Maps JS, Gemini |
-| **Civic data** | NYC 2015 Street Tree Census (700k+ mapped trees) |
-| **Public interest** | Safer outdoor navigation for allergy-sensitive residents |
+The agent path declares tools for:
 
----
+- fetching walking routes
+- fetching pollen data
+- fetching weather data
+- scoring route exposure
 
-## Quick start
+Those signals are gathered in parallel, scored against the tree grid, and then passed to Gemini as grounded context for final explanations.
+
+## Scoring Model
+
+Route exposure is computed by:
+
+1. Decoding each route polyline
+2. Sampling points along the path
+3. Looking up each sampled point in the tree-grid cells
+4. Measuring canopy burden and species overlap with the user's profile
+5. Adjusting the result with pollen, wind, humidity, route duration, and user sensitivity
+6. Ranking routes from lowest to highest exposure
+
+This means a slightly longer walk can rank higher if it avoids denser or more trigger-heavy canopy pockets.
+
+## Demo Scenario
+
+Try the app with:
+
+- From: `Washington Square Park, New York, NY`
+- To: `Lincoln Center, New York, NY`
+- Triggers: `oak`, `birch`, `maple`
+- Sensitivity: `medium` or `high`
+
+Or say:
+
+`from Washington Square Park to Lincoln Center`
+
+This scenario is tuned to show a visible tradeoff between route speed and allergy exposure.
+
+## Local Setup
+
+1. Install dependencies:
 
 ```bash
-cp .env.example .env.local
-# Add your API keys to .env.local
 npm install
+```
+
+2. Create a `.env.local` file in the project root:
+
+```bash
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+GOOGLE_MAPS_API_KEY=
+GOOGLE_POLLEN_API_KEY=
+GOOGLE_WEATHER_API_KEY=
+GOOGLE_AI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+3. Start the app:
+
+```bash
 npm run dev
 ```
 
-Open `http://localhost:3000` and try the demo scenario below.
+4. Open `http://localhost:3000`
 
----
-
-## Environment variables
-
-| Variable | Purpose |
-|---|---|
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Maps JS + Places autocomplete (browser) |
-| `GOOGLE_MAPS_API_KEY` | Routes API + Geocoding (server) |
-| `GOOGLE_POLLEN_API_KEY` | Pollen signal lookup |
-| `GOOGLE_WEATHER_API_KEY` | Weather signal lookup |
-| `GOOGLE_AI_API_KEY` | Gemini — voice parsing + route synthesis |
-| `GEMINI_MODEL` | Optional model override (default: `gemini-2.5-flash`) |
-
-All signals have graceful fallbacks — the app works in degraded mode without some keys.
-
----
-
-## Demo scenario
-
-- **From:** Washington Square Park, New York, NY
-- **To:** Lincoln Center, New York, NY
-- **Triggers:** oak, birch, maple
-- **Sensitivity:** medium or high
-
-Or try saying: *"from Washington Square Park to Lincoln Center"* using the mic button.
-
-This scenario shows a clear tradeoff between route speed and pollen exposure across Broadway, 6th Ave, and Amsterdam Ave corridors.
-
----
-
-## Key files
-
-| File | Role |
-|---|---|
-| [`lib/server/agent.ts`](lib/server/agent.ts) | ADK agent — tool declarations, parallel fetch, Gemini synthesis |
-| [`app/api/voice-parse/route.ts`](app/api/voice-parse/route.ts) | Gemini NLP — extracts origin/destination from voice transcript |
-| [`components/voice-button.tsx`](components/voice-button.tsx) | Web Speech API mic + state machine |
-| [`components/pollen-safe-app.tsx`](components/pollen-safe-app.tsx) | Planner — analysis, map, route cards, speechSynthesis |
-| [`lib/scoring.ts`](lib/scoring.ts) | Exposure scoring — tree census × pollen × weather × sensitivity |
-| [`lib/server/google-maps.ts`](lib/server/google-maps.ts) | Routes API + geocoding + fallback route builder |
-
----
-
-## Tree grid preprocessing
-
-The repo includes a demo grid at `data/tree-grid.sample.json` (NYC sample).
-
-To build from the full 700k-tree census CSV:
-
-```bash
-npm run build-tree-grid -- ./StreetTreeCensus.csv ./data/tree-grid.generated.json
-```
-
----
+The app includes graceful fallbacks, so some parts of the experience still work in degraded mode when certain live APIs are unavailable.
 
 ## Commands
 
 ```bash
-npm run dev        # development server
-npm run build      # production build
-npm run test       # run tests (vitest)
+npm run dev
+npm run build
+npm run test
+npm run build-tree-grid -- ./StreetTreeCensus.csv ./data/tree-grid.generated.json
+npm run capture:readme-demo
+npm run build:readme-demo-gif
 ```
 
----
+## Key Files
+
+| File | Role |
+|---|---|
+| `components/landing-page.tsx` | Landing page and route-intent capture |
+| `components/register-page.tsx` | Registration and allergy-profile onboarding |
+| `components/pollen-safe-app.tsx` | Main planner UI, analysis flow, and speech output |
+| `components/voice-button.tsx` | Speech recognition UI with Gemini + local parsing fallback |
+| `components/route-map.tsx` | Route rendering and hotspot overlays on Google Maps |
+| `app/api/voice-parse/route.ts` | Voice command parsing with Gemini |
+| `app/api/route-analysis/route.ts` | Main API entry point for route analysis |
+| `lib/server/agent.ts` | ADK-style agent orchestration path |
+| `lib/server/route-analysis.ts` | Direct analysis pipeline with fallbacks |
+| `lib/scoring.ts` | Core pollen-exposure scoring logic |
+| `lib/tree-grid.ts` | Tree-grid lookup layer |
+| `scripts/build-tree-grid.ts` | CSV-to-grid preprocessing script |
+
+## Data
+
+The repository includes a demo tree grid in `data/tree-grid.sample.json`.
+
+That sample is based on the NYC 2015 Street Tree Census and is used to score route exposure by neighborhood canopy burden and top tree species.
 
 ## Deployment
 
-The app is configured for standalone Next.js output and includes a `Dockerfile` for Cloud Run:
+The app is configured for standalone Next.js output and includes a `Dockerfile` suitable for Cloud Run.
+
+Example:
 
 ```bash
 gcloud run deploy treeroute \
@@ -174,8 +218,6 @@ gcloud run deploy treeroute \
   --allow-unauthenticated \
   --set-env-vars GOOGLE_AI_API_KEY=...,GOOGLE_MAPS_API_KEY=...
 ```
-
----
 
 ## Team
 
