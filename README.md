@@ -17,9 +17,6 @@ Built for the NYC Build With AI Hackathon.
 Live demo:
 https://treeroute-501252220143.us-central1.run.app/
 
-Presentation deck:
-https://docs.google.com/presentation/d/1Kf7AQ54lSMRo7GjB3PVdwe48MnMswPF4Mdgl18ub_s0/edit?usp=sharing
-
 ![treeroute demo](./docs/media/treeroute-demo.gif)
 
 ## Why It Stands Out
