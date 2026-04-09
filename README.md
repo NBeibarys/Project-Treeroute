@@ -1,4 +1,4 @@
-# treeroute
+# TreeRoute
 
 treeroute is a hackathon-winning multimodal walking route planner for allergy-sensitive New Yorkers.
 
