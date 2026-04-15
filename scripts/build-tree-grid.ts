@@ -45,8 +45,10 @@ const origin = {
   lat: Math.min(...points.map((point) => point.lat)),
   lng: Math.min(...points.map((point) => point.lng)),
 };
-const latStep = 0.01;
-const lngStep = 0.012;
+// ~20 m resolution — fine enough for the 20 m pedestrian-exposure radius query.
+// At NYC latitude: 0.00018 deg lat ≈ 20 m, 0.00024 deg lng ≈ 20 m.
+const latStep = 0.00018;
+const lngStep = 0.00024;
 
 const buckets = new Map<
   string,

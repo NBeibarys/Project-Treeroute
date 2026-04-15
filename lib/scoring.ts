@@ -1,16 +1,26 @@
-import { SENSITIVITY_MULTIPLIERS, TRIGGER_ALIASES } from "@/lib/constants";
+import { SENSITIVITY_MULTIPLIERS, SPECIES_SEASON_FACTOR, TRIGGER_ALIASES } from "@/lib/constants";
 import { decodePolyline } from "@/lib/polyline";
-import { lookupTreeCell } from "@/lib/tree-grid";
+import { lookupTreeCellsInRadius } from "@/lib/tree-grid";
 import type {
   ExposureLevel,
   GoogleRoute,
   PollenSignal,
   RouteCandidate,
   RouteHotspot,
+  TreeGridCell,
   UserProfile,
   WeatherSignal,
 } from "@/lib/types";
 import { clamp, exposureLevelFromScore, round, sampleRoutePoints } from "@/lib/utils";
+
+/** Pedestrian exposure radius — trees within this distance affect the score. */
+const TREE_EXPOSURE_RADIUS_METERS = 20;
+
+/**
+ * Fallback burden used when a route point falls outside the tree-grid coverage.
+ * Represents a typical NYC street-level canopy baseline.
+ */
+const DEFAULT_BURDEN = 18;
 
 interface RouteScoreResult {
   candidate: RouteCandidate;
@@ -37,13 +47,18 @@ function scoreSingleRoute(
   pollen: PollenSignal,
 ): RouteScoreResult {
   const points = decodePolyline(route.polyline);
-  const sampledPoints = sampleRoutePoints(points, 14);
+
+  // Sample more points for longer routes (~1 sample per 120 m, capped at 40).
+  const sampleCount = clamp(Math.round(route.distanceMeters / 120), 10, 40);
+  const sampledPoints = sampleRoutePoints(points, sampleCount);
+
   const sensitivity = SENSITIVITY_MULTIPLIERS[profile.sensitivity];
   const treeMatches = profile.knowsTreeTriggers ? profile.triggers : [];
   const generalAvoidanceMode = !profile.knowsTreeTriggers || !treeMatches.length;
   const routeTimeBoost = clamp(route.durationMin / 36, 0.7, 1.25);
-  const pollenBoost = getTreePollenBoost(pollen);
+  const pollenFactor = getTreePollenFactor(pollen);
   const weatherBoost = getWeatherBoost(weather);
+  const month = new Date().getMonth();
 
   let aggregateBurden = 0;
   let peakBurden = 0;
@@ -52,32 +67,54 @@ function scoreSingleRoute(
   const hotspots: RouteHotspot[] = [];
 
   sampledPoints.forEach((point, pointIndex) => {
-    const cell = lookupTreeCell(point);
-    if (!cell) {
-      return;
+    // Collect all tree-grid cells within the pedestrian exposure radius.
+    const cells = lookupTreeCellsInRadius(point, TREE_EXPOSURE_RADIUS_METERS);
+
+    let burden: number;
+    let areaName = "NYC corridor";
+
+    if (!cells.length) {
+      // Point is outside grid coverage — use the baseline burden.
+      burden = DEFAULT_BURDEN;
+    } else {
+      const merged = mergeCells(cells);
+      areaName = merged.areaName;
+      // Dampen species weights by their current-month pollen activity.
+      const seasonalWeights = applySeasonality(merged.speciesWeights, month);
+      const speciesBoost = getSpeciesMatchBoost(
+        treeMatches,
+        seasonalWeights,
+        merged.topSpecies,
+        generalAvoidanceMode,
+      );
+      burden = merged.canopyScore * speciesBoost;
     }
 
-    const speciesBoost = getSpeciesMatchBoost(treeMatches, cell.speciesWeights, cell.topSpecies, generalAvoidanceMode);
-    const burden = cell.canopyScore * speciesBoost;
     aggregateBurden += burden;
     peakBurden = Math.max(peakBurden, burden);
 
     if (burden >= dominantRisk) {
       dominantRisk = burden;
-      dominantArea = cell.areaName;
+      dominantArea = areaName;
     }
 
     hotspots.push({
       lat: point.lat,
       lng: point.lng,
-      label: `${cell.areaName} hotspot ${pointIndex + 1}`,
+      label: `${areaName} hotspot ${pointIndex + 1}`,
       risk: round(burden, 0),
     });
   });
 
-  const normalizedBurden = sampledPoints.length ? aggregateBurden / sampledPoints.length : 18;
+  const normalizedBurden = sampledPoints.length ? aggregateBurden / sampledPoints.length : DEFAULT_BURDEN;
+
+  // pollenFactor is multiplicative on the tree burden so high-pollen days
+  // amplify route differences rather than just shifting every score equally.
+  // Coefficients are calibrated so canopyScore=80 × maxBoost × maxPollenFactor
+  // lands near the top of the scale without hitting the 98 ceiling.
+  const treePart = normalizedBurden * 0.28 + peakBurden * 0.12;
   const score = clamp(
-    (normalizedBurden * 0.34 + peakBurden * 0.1 + pollenBoost * 5 + routeTimeBoost * 3) * sensitivity * weatherBoost,
+    (treePart * pollenFactor + routeTimeBoost * 3) * sensitivity * weatherBoost,
     8,
     98,
   );
@@ -105,8 +142,54 @@ function scoreSingleRoute(
   };
 }
 
-function getTreePollenBoost(pollen: PollenSignal) {
-  return clamp(pollen.treeIndex + pollen.grassIndex * 0.12 + pollen.weedIndex * 0.08, 1, 5.5);
+/** Merge multiple overlapping cells into a single aggregate view. */
+function mergeCells(cells: TreeGridCell[]): {
+  canopyScore: number;
+  speciesWeights: Record<string, number>;
+  topSpecies: string[];
+  areaName: string;
+} {
+  if (cells.length === 1) {
+    return cells[0];
+  }
+
+  const canopyScore = cells.reduce((sum, c) => sum + c.canopyScore, 0) / cells.length;
+
+  const allSpecies = new Set(cells.flatMap((c) => Object.keys(c.speciesWeights)));
+  const speciesWeights: Record<string, number> = {};
+  for (const species of allSpecies) {
+    const avg = cells.reduce((sum, c) => sum + (c.speciesWeights[species] ?? 0), 0) / cells.length;
+    if (avg > 0) speciesWeights[species] = Number(avg.toFixed(2));
+  }
+
+  const topSpecies = Object.entries(speciesWeights)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([s]) => s);
+
+  // Use the area name from the densest cell.
+  const areaName = cells.reduce((best, c) => (c.canopyScore > best.canopyScore ? c : best)).areaName;
+
+  return { canopyScore, speciesWeights, topSpecies, areaName };
+}
+
+/** Scale each species weight by its current-month pollen activity factor. */
+function applySeasonality(speciesWeights: Record<string, number>, month: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(speciesWeights).map(([species, weight]) => {
+      const factors = SPECIES_SEASON_FACTOR[species] ?? SPECIES_SEASON_FACTOR["tree"];
+      return [species, weight * (factors[month] ?? 0.5)];
+    }),
+  );
+}
+
+/**
+ * Convert the pollen signal into a multiplicative factor (1.0–1.5).
+ * Tree pollen dominates; grass and weed contribute a small fraction.
+ */
+function getTreePollenFactor(pollen: PollenSignal): number {
+  const index = pollen.treeIndex + pollen.grassIndex * 0.12 + pollen.weedIndex * 0.08;
+  return clamp(1 + index * 0.083, 1.0, 1.5);
 }
 
 function getWeatherBoost(weather: WeatherSignal) {
