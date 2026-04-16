@@ -1,8 +1,8 @@
 import unittest
 
-from app.domain.geometry import encode_polyline
-from app.domain.scoring import score_routes
-from app.schemas.models import GoogleRoute, LatLngLiteral, PollenSignal, UserProfile, WeatherSignal
+from app.domain.geometry import encode_polyline, sample_route_points
+from app.domain.scoring import merge_cells, score_routes
+from app.schemas.models import GoogleRoute, LatLngLiteral, PollenSignal, RouteSignals, TreeGridCell, UserProfile, WeatherSignal
 
 WEATHER = WeatherSignal(
     description="Breezy and dry",
@@ -145,6 +145,112 @@ class ScoreRoutesTests(unittest.TestCase):
         )[0]["candidate"].exposureScore
 
         self.assertGreater(intense_score, calm_score)
+
+    def test_can_use_route_specific_signals_to_change_ranking(self):
+        first_route = build_route(
+            "calm-corridor",
+            [(40.752, -73.984), (40.776, -73.97)],
+            20,
+            2100,
+        )
+        second_route = build_route(
+            "windy-corridor",
+            [(40.752, -73.984), (40.776, -73.97)],
+            20,
+            2100,
+        )
+        profile = UserProfile(
+            triggers=[],
+            sensitivity="medium",
+            knowsTreeTriggers=False,
+        )
+        route_signals = [
+            RouteSignals(
+                weather=WeatherSignal(description="Calm", windSpeedMph=4, humidity=66, temperatureF=58),
+                pollen=PollenSignal(treeIndex=2, grassIndex=1, weedIndex=1, summary="Lower tree pollen"),
+            ),
+            RouteSignals(
+                weather=WeatherSignal(description="Windy", windSpeedMph=18, humidity=32, temperatureF=74),
+                pollen=PollenSignal(treeIndex=5, grassIndex=1, weedIndex=1, summary="Higher tree pollen"),
+            ),
+        ]
+
+        ranked = score_routes(
+            [first_route, second_route],
+            profile,
+            WEATHER,
+            POLLEN,
+            current_month=self.month,
+            route_signals=route_signals,
+        )
+
+        self.assertEqual(ranked[0]["candidate"].id, "calm-corridor")
+        self.assertLess(
+            ranked[0]["candidate"].exposureScore,
+            ranked[1]["candidate"].exposureScore,
+        )
+
+    def test_includes_score_breakdown_on_scored_candidates(self):
+        route = build_route(
+            "r1",
+            [(40.752, -73.984), (40.776, -73.97)],
+            20,
+            2100,
+        )
+        profile = UserProfile(
+            triggers=["oak"],
+            sensitivity="medium",
+            knowsTreeTriggers=True,
+        )
+
+        candidate = score_routes([route], profile, WEATHER, POLLEN, current_month=self.month)[0]["candidate"]
+
+        self.assertIsNotNone(candidate.scoreBreakdown)
+        self.assertEqual(candidate.scoreBreakdown.finalScore, candidate.exposureScore)
+
+
+class GeometryAndWeightingTests(unittest.TestCase):
+    def test_samples_points_by_equal_distance(self):
+        points = [
+            LatLngLiteral(lat=40.0, lng=-73.0),
+            LatLngLiteral(lat=40.0, lng=-72.99),
+        ]
+
+        sampled = sample_route_points(points, 3)
+
+        self.assertEqual(len(sampled), 3)
+        self.assertAlmostEqual(sampled[0].lng, -73.0, places=5)
+        self.assertAlmostEqual(sampled[1].lng, -72.995, places=3)
+        self.assertAlmostEqual(sampled[2].lng, -72.99, places=5)
+
+    def test_merge_cells_weights_closer_cells_more_heavily(self):
+        point = LatLngLiteral(lat=40.75, lng=-73.98)
+        cells = [
+            TreeGridCell(
+                key="0:0",
+                center=LatLngLiteral(lat=40.75, lng=-73.98),
+                areaName="Near block",
+                density=1.0,
+                canopyScore=80,
+                topSpecies=["oak"],
+                speciesWeights={"oak": 1.0},
+            ),
+            TreeGridCell(
+                key="0:1",
+                center=LatLngLiteral(lat=40.75, lng=-73.97979),
+                areaName="Far block",
+                density=0.6,
+                canopyScore=20,
+                topSpecies=["maple"],
+                speciesWeights={"maple": 1.0},
+            ),
+        ]
+
+        merged = merge_cells(cells, point, 20)
+
+        self.assertEqual(merged["area_name"], "Near block")
+        self.assertGreater(merged["canopy_score"], 50)
+        self.assertEqual(merged["top_species"][0], "oak")
 
 
 if __name__ == "__main__":

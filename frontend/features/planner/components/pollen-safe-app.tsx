@@ -230,6 +230,41 @@ export function PollenSafeApp() {
                       <span>{Math.round((route.distanceMeters / 1609.34) * 10) / 10} mi</span>
                     </div>
 
+                    {route.scoreBreakdown ? (
+                      <div className="score-breakdown">
+                        <div className="score-breakdown-item">
+                          <span>Tree load</span>
+                          <strong>{route.scoreBreakdown.treeExposure.toFixed(1)}</strong>
+                        </div>
+                        <div className="score-breakdown-item">
+                          <span>Peak pocket</span>
+                          <strong>{route.scoreBreakdown.peakTreeExposure.toFixed(1)}</strong>
+                        </div>
+                        <div className="score-breakdown-item">
+                          <span>Walk time</span>
+                          <strong>{route.scoreBreakdown.routeTimePenalty.toFixed(1)}</strong>
+                        </div>
+                        <div className="score-breakdown-item">
+                          <span>Pollen</span>
+                          <strong>
+                            {route.scoreBreakdown.treePollenIndex.toFixed(1)} / x
+                            {route.scoreBreakdown.pollenFactor.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="score-breakdown-item">
+                          <span>Weather</span>
+                          <strong>
+                            {Math.round(route.scoreBreakdown.windSpeedMph)} mph / x
+                            {route.scoreBreakdown.weatherFactor.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="score-breakdown-item">
+                          <span>Sensitivity</span>
+                          <strong>x{route.scoreBreakdown.sensitivityFactor.toFixed(2)}</strong>
+                        </div>
+                      </div>
+                    ) : null}
+
                     <p className="route-explanation">{route.explanation}</p>
                     <div className="rationale-list">
                       {route.rationale.map((item) => (

@@ -40,11 +40,55 @@ def distance_meters(a: LatLngLiteral, b: LatLngLiteral):
 
 
 def sample_route_points(points: list[LatLngLiteral], samples: int = 12):
-    if len(points) <= samples:
-        return points
+    if not points:
+        return []
 
-    bucket = (len(points) - 1) / (samples - 1)
-    return [points[round(index * bucket)] for index in range(samples)]
+    if len(points) == 1 or samples <= 1:
+        return [points[0]]
+
+    cumulative_distances = [0.0]
+    for index in range(1, len(points)):
+        cumulative_distances.append(
+            cumulative_distances[-1] + distance_meters(points[index - 1], points[index])
+        )
+
+    total_distance = cumulative_distances[-1]
+    if total_distance == 0:
+        return [points[0]]
+
+    sampled = [points[0]]
+    segment_index = 0
+
+    for sample_index in range(1, samples - 1):
+        target_distance = total_distance * (sample_index / (samples - 1))
+
+        while (
+            segment_index < len(cumulative_distances) - 2
+            and cumulative_distances[segment_index + 1] < target_distance
+        ):
+            segment_index += 1
+
+        segment_start_distance = cumulative_distances[segment_index]
+        segment_end_distance = cumulative_distances[segment_index + 1]
+
+        if segment_end_distance == segment_start_distance:
+            sampled.append(points[segment_index])
+            continue
+
+        ratio = (target_distance - segment_start_distance) / (
+            segment_end_distance - segment_start_distance
+        )
+        start = points[segment_index]
+        end = points[segment_index + 1]
+        sampled.append(
+            LatLngLiteral(
+                lat=start.lat + (end.lat - start.lat) * ratio,
+                lng=start.lng + (end.lng - start.lng) * ratio,
+            )
+        )
+
+    sampled.append(points[-1])
+    return sampled
 
 
 def exposure_level_from_score(score: float) -> ExposureLevel:

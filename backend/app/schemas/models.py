@@ -51,6 +51,18 @@ class RouteHotspot(BaseModel):
     risk: float
 
 
+class RouteScoreBreakdown(BaseModel):
+    treeExposure: float
+    peakTreeExposure: float
+    routeTimePenalty: float
+    pollenFactor: float
+    weatherFactor: float
+    sensitivityFactor: float
+    treePollenIndex: float
+    windSpeedMph: float
+    finalScore: float
+
+
 class RouteCandidate(BaseModel):
     id: str
     label: str
@@ -62,6 +74,7 @@ class RouteCandidate(BaseModel):
     explanation: str
     rationale: list[str]
     hotspots: list[RouteHotspot]
+    scoreBreakdown: RouteScoreBreakdown | None = None
 
 
 class WeatherSignal(BaseModel):
@@ -76,6 +89,11 @@ class PollenSignal(BaseModel):
     grassIndex: float
     weedIndex: float
     summary: str
+
+
+class RouteSignals(BaseModel):
+    weather: WeatherSignal
+    pollen: PollenSignal
 
 
 class CivicInsight(BaseModel):

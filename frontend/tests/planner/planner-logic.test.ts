@@ -22,6 +22,17 @@ const baseResponse: RouteAnalysisResponse = {
       explanation: "It avoids denser tree pockets.",
       rationale: ["Lower canopy burden"],
       hotspots: [],
+      scoreBreakdown: {
+        treeExposure: 8.4,
+        peakTreeExposure: 3.1,
+        routeTimePenalty: 2.2,
+        pollenFactor: 1.18,
+        weatherFactor: 1.04,
+        sensitivityFactor: 1,
+        treePollenIndex: 3,
+        windSpeedMph: 7,
+        finalScore: 18,
+      },
     },
   ],
   civicInsight: {

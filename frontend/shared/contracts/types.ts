@@ -35,6 +35,18 @@ export interface RouteHotspot {
   risk: number;
 }
 
+export interface RouteScoreBreakdown {
+  treeExposure: number;
+  peakTreeExposure: number;
+  routeTimePenalty: number;
+  pollenFactor: number;
+  weatherFactor: number;
+  sensitivityFactor: number;
+  treePollenIndex: number;
+  windSpeedMph: number;
+  finalScore: number;
+}
+
 export interface RouteCandidate {
   id: string;
   label: string;
@@ -46,6 +58,7 @@ export interface RouteCandidate {
   explanation: string;
   rationale: string[];
   hotspots: RouteHotspot[];
+  scoreBreakdown?: RouteScoreBreakdown;
 }
 
 export interface WeatherSignal {

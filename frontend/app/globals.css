@@ -922,6 +922,36 @@ input, textarea { color: var(--ink); }
   font-size: 0.82rem;
 }
 
+.score-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.score-breakdown-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+}
+
+.score-breakdown-item span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.score-breakdown-item strong {
+  color: var(--ink-2);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .route-explanation {
   margin: 12px 0;
   line-height: 1.65;
